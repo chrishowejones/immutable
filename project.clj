@@ -11,4 +11,6 @@
   :ring {:handler immutable.handler/app}
   :profiles
   {:dev {:dependencies [[javax.servlet/servlet-api "2.5"]
-                        [ring/ring-mock "0.3.0"]]}})
+                        [ring/ring-mock "0.3.0"]]
+         :source-paths ["dev"]}
+   :uberjar {:aot [immutable.main]}})

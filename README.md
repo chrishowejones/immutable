@@ -1,6 +1,6 @@
 # immutable
 
-FIXME
+Simple example app to demo immutability
 
 ## Prerequisites
 
@@ -14,6 +14,15 @@ To start a web server for the application, run:
 
     lein ring server
 
+To run from main method:
+
+    lein run
+
+To build and run:
+
+    lein uberjar
+    java -jar
+
 ## License
 
-Copyright © 2016 FIXME
+Copyright Chris Howe-Jones 2016
