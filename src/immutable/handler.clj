@@ -39,20 +39,32 @@
                        (jdbc/drop-table-ddl :PERSON)))
 
 ;; SQL
-(def get-id
-  (let [id (atom 0)]
-    (fn []
-      (swap! id inc))))
 
-;; Helper function to convert keywords with hyphens to underscores for column names
-(defn- key->column
-  [key]
-  (-> key str (s/replace ":" "") (s/replace "-" "_") keyword))
+;; Helper functions to convert keywords with hyphens to underscores for column names or
+;; vice versa
+(defn- key->key-replace-chars
+  [match replacement]
+  (fn [k]
+   (-> k str (s/replace ":" "") (s/replace match replacement) keyword)))
 
-;; N.B. Has to convert any - in map keys to _
-(defn- map->col-val-map
-  [person]
-  (into {} (map (fn [[k v]] [(key->column k) v]) person)))
+(def key->column
+   (key->key-replace-chars "-" "_"))
+
+(def column->key
+  (key->key-replace-chars "_" "-"))
+
+(defn- convert-keys-fn
+  [conversion-fn]
+  (fn [person]
+   (into {} (map (fn [[k v]] [(conversion-fn k) v]) person))))
+
+;; Close over the key->column conversion with the higher order convert-keys-fn
+(def map->col-val-map
+  (convert-keys-fn key->column))
+
+;; Close over the column->key conversion with the higher order convert-keys-fn
+(def col-val-map->map
+  (convert-keys-fn column->key))
 
 (defn store-person
   "Store a person map in database and returns the id"
@@ -66,8 +78,11 @@
 (defn get-person
   "Get a person from database using person id"
   [person-id]
-  (jdbc/with-db-connection [db-conn pooled-ds-spec]
-    (jdbc/query db-conn ["SELECT * FROM person WHERE id = ?" person-id])))
+  (->
+   (jdbc/with-db-connection [db-conn pooled-ds-spec]
+     (jdbc/query db-conn ["SELECT * FROM person WHERE id = ?" person-id]))
+   first
+   col-val-map->map))
 
 ;; Find collection of people that match search
 ;; Need a helper to convert search string to SQL 'like' term with %
@@ -79,8 +94,9 @@
   [search]
   (let [sql (into ["SELECT * FROM person WHERE first_name like ? OR last_name like ? OR dob like ?"]
                   (repeat 3 (term->like-term search)))]
-   (jdbc/with-db-connection [db-conn pooled-ds-spec]
-     (jdbc/query db-conn sql))))
+    (map col-val-map->map
+         (jdbc/with-db-connection [db-conn pooled-ds-spec]
+           (jdbc/query db-conn sql)))))
 
 ;; RENDER
 (defn page-layout
@@ -166,7 +182,7 @@
        [:div.row.col-xs-12
         (for [[k v] person]
           [:div
-           [:div.col-xs-1  [:label (key->label k)]]
+           [:label.col-xs-2 (key->label k)]
            [:div.col-xs-1 v]])]))])
 
 (defn home-page
@@ -242,5 +258,7 @@
   (map (fn [[k v]] {(key->column k) v}) {:first-name "fred" :last-name "bloggs"})
   (map->col-val-map {:first-name "fred" :last-name "bloggs"})
 
-  (repeat 3 (term->like-term "fred"))
+  (map (fn [person]
+         (into {} (map (fn [[k v]] [(key->column k) v]) person))) [{:first-name "chris"}])
+
   )
