@@ -10,7 +10,9 @@
             [ring.middleware
              [defaults :refer [site-defaults wrap-defaults]]
              [reload :refer [wrap-reload]]]
-            [ring.util.anti-forgery :refer [anti-forgery-field]]
+            [ring.util
+             [anti-forgery :refer [anti-forgery-field]]
+             [response :refer [redirect]]]
             [clojure.java.jdbc :as jdbc]
             [jdbc.pool.c3p0 :as pool]))
 
@@ -116,21 +118,22 @@
        [:div.row.col-xs-12 status-message]]]])))
 
 (defn person-table
-  [{:keys [first-name last-name dob]}]
-  [:div.table
-   [:div.row.col-xs-12.col-xs-offset-2 [:h3.text-info "Person"]]
-   [:div.row [:br]]
-   [:div.row
-    [:div.col-xs-3 [:label "First name:"]]
-    [:div.col-xs-3 first-name]]
-   [:div.row [:br]]
-   [:div.row
-    [:div.col-xs-3 [:label "Last name:"]]
-    [:div.col-xs-3 last-name]]
-   [:div.row [:br]]
-   [:div.row
-    [:div.col-xs-3 [:label "Date of Birth:"]]
-    [:div.col-xs-3 dob]]])
+  [{:keys [first-name last-name dob] :as person}]
+  (when (seq person)
+   [:div.table
+     [:div.row.col-xs-12.col-xs-offset-2 [:h3.text-info "Person"]]
+     [:div.row [:br]]
+     [:div.row
+      [:div.col-xs-3 [:label "First name:"]]
+      [:div.col-xs-3 first-name]]
+     [:div.row [:br]]
+     [:div.row
+      [:div.col-xs-3 [:label "Last name:"]]
+      [:div.col-xs-3 last-name]]
+     [:div.row [:br]]
+     [:div.row
+      [:div.col-xs-3 [:label "Date of Birth:"]]
+      [:div.col-xs-3 dob]]]))
 
 (defn create-person-form
   []
@@ -168,6 +171,20 @@
     [:div.row
      [:div.col-xs-4 (submit-button "Search")]])])
 
+(defn find-person-form
+  []
+  [:div.table
+   (form-to [:post "findperson" ]
+            (anti-forgery-field)
+    [:div.row.col-xs-12.col-xs-offset-4 [:h3.text-info "Find person by id"]]
+    [:div.row [:br]]
+    [:div.row
+     [:div.col-xs-3 (label "findbyid" "Find Person by id:")]
+     [:div (text-field {:placeholder "Enter id"} "id")]]
+    [:div.row [:br]]
+    [:div.row
+     [:div.col-xs-4 (submit-button "Find")]])])
+
 (defn- key->label
   [key]
   (-> key str (s/replace ":" "") (s/replace #"-" " ") s/capitalize (str ":")))
@@ -190,13 +207,14 @@
   (page-layout
    [:div
     [:div.row.col-xs-12 (link-to "/createperson" "Create a person")]
-    [:div.row.col-xs-12 (link-to "/findpeople" "Search for people")]]))
+    [:div.row.col-xs-12 (link-to "/findpeople" "Search for people")]
+    [:div.row.col-xs-12 (link-to "/findperson" "Find person by id")]]))
 
 ;; NAVIGATION
 (defn show-person-page
   [person-id]
   (let [person (get-person person-id)
-        status-msg (if person "" (format "No person with id: %s found" person-id))]
+        status-msg (if (empty? person) (format "No person with id: %s found" person-id) "")]
     (page-layout (person-table person) status-msg)))
 
 (defn create-person-page
@@ -213,6 +231,10 @@
   []
   (page-layout (find-people-form)))
 
+(defn find-person-page
+  []
+  (page-layout (find-person-form)))
+
 (defn people-found-page
   [search]
   (page-layout (people-found-table search)))
@@ -222,6 +244,8 @@
   (GET "/createperson" [] (create-person-page))
   (POST "/createperson" {params :params} (create-person params))
   (GET "/person/:id" [id] (-> id read-string show-person-page))
+  (GET "/findperson" [] (find-person-page))
+  (POST "/findperson" [id] (redirect (str "/person/" id) :see-other))
   (GET "/findpeople" [] (find-people-page))
   (POST "/findpeople" [search] (people-found-page (find-people search)))
   (route/not-found "Not Found"))
