@@ -10,9 +10,32 @@
             [ring.middleware
              [defaults :refer [site-defaults wrap-defaults]]
              [reload :refer [wrap-reload]]]
-            [ring.util.anti-forgery :refer [anti-forgery-field]]))
+            [ring.util.anti-forgery :refer [anti-forgery-field]]
+            [clojure.java.jdbc :as jdbc]
+            [jdbc.pool.c3p0 :as pool]))
 
 ;; PERSISTENCE
+(def db-spec {:classname   "org.h2.Driver"
+              :subprotocol "h2:mem"
+              :subname     "people;DB_CLOSE_DELAY=-1"
+              :user        "sa"
+              :password    ""})
+
+(def pooled-ds-spec (pool/make-datasource-spec db-spec))
+
+(defn create-person-table
+  []
+  (jdbc/db-do-commands pooled-ds-spec
+                       (jdbc/create-table-ddl :PERSON
+                                              [[:id "bigint auto_increment PRIMARY KEY"]
+                                               [:first_name "varchar(256)"]
+                                               [:last_name "varchar(256)"]
+                                               [:dob "varchar(256)"]])))
+
+(defn drop-tables
+  []
+  (jdbc/db-do-commands pooled-ds-spec
+                       (jdbc/drop-table-ddl :PERSON)))
 
 ;; temporary store - remove and replace with h2 database
 (defonce temp-store (atom {}))
@@ -45,7 +68,7 @@
   [search]
   (reduce (search-people search) [] (vals @temp-store)))
 
-;; RENDER HTML
+;; RENDER
 (defn page-layout
   ([page-body] (page-layout page-body ""))
   ([page-body status-message]
@@ -187,3 +210,19 @@
 (defn app-handle
   [reload?]
   (if reload? #'app #'reloadable-app))
+
+(comment
+
+  (jdbc/with-db-connection [db-conn ds-spec]
+   (jdbc/insert! db-conn :person
+                 {:first_name "Test2"
+                  :last_name "Last"
+                  :dob "2nd Feb"}))
+
+  (jdbc/with-db-connection [db-conn ds-spec]
+    (jdbc/query db-conn "SELECT * FROM person"))
+
+
+
+
+  )
