@@ -15,6 +15,7 @@
             [jdbc.pool.c3p0 :as pool]))
 
 ;; PERSISTENCE
+;; database set up
 (def db-spec {:classname   "org.h2.Driver"
               :subprotocol "h2:mem"
               :subname     "people;DB_CLOSE_DELAY=-1"
@@ -37,36 +38,49 @@
   (jdbc/db-do-commands pooled-ds-spec
                        (jdbc/drop-table-ddl :PERSON)))
 
-;; temporary store - remove and replace with h2 database
-(defonce temp-store (atom {}))
-
+;; SQL
 (def get-id
   (let [id (atom 0)]
     (fn []
       (swap! id inc))))
 
-(defn store-person [person]
-  (let [id (get-id)]
-    (swap! temp-store assoc id person)
-    id))
+;; Helper function to convert keywords with hyphens to underscores for column names
+(defn- key->column
+  [key]
+  (-> key str (s/replace ":" "") (s/replace "-" "_") keyword))
 
+;; N.B. Has to convert any - in map keys to _
+(defn- map->col-val-map
+  [person]
+  (into {} (map (fn [[k v]] [(key->column k) v]) person)))
+
+(defn store-person
+  "Store a person map in database and returns the id"
+  [person]
+  (let [person-value (map->col-val-map person)]
+    (let [res (jdbc/with-db-connection [db-conn pooled-ds-spec]
+                (jdbc/insert! db-conn :person person-value))]
+      (when res (-> res first vals first)))))
+
+;; Find person by id
 (defn get-person
+  "Get a person from database using person id"
   [person-id]
-  (@temp-store person-id))
+  (jdbc/with-db-connection [db-conn pooled-ds-spec]
+    (jdbc/query db-conn ["SELECT * FROM person WHERE id = ?" person-id])))
 
-(defn- search-people
-  [search]
-  (fn [people person]
-    (let [search-pattern (re-pattern search)]
-      (if (or (re-find search-pattern (:first-name person))
-              (re-find search-pattern (:last-name person))
-              (re-find search-pattern (:dob person)))
-        (conj people person)
-        people))))
+;; Find collection of people that match search
+;; Need a helper to convert search string to SQL 'like' term with %
+(defn- term->like-term
+  [term]
+  (str "%" term "%"))
 
 (defn find-people
   [search]
-  (reduce (search-people search) [] (vals @temp-store)))
+  (let [sql (into ["SELECT * FROM person WHERE first_name like ? OR last_name like ? OR dob like ?"]
+                  (repeat 3 (term->like-term search)))]
+   (jdbc/with-db-connection [db-conn pooled-ds-spec]
+     (jdbc/query db-conn sql))))
 
 ;; RENDER
 (defn page-layout
@@ -152,8 +166,8 @@
        [:div.row.col-xs-12
         (for [[k v] person]
           [:div
-           [:div.col-xs-2  [:label (key->label k)]]
-           [:div.col-xs-2 v]])]))])
+           [:div.col-xs-1  [:label (key->label k)]]
+           [:div.col-xs-1 v]])]))])
 
 (defn home-page
   []
@@ -213,16 +227,20 @@
 
 (comment
 
-  (jdbc/with-db-connection [db-conn ds-spec]
+  (jdbc/with-db-connection [db-conn pooled-ds-spec]
    (jdbc/insert! db-conn :person
                  {:first_name "Test2"
                   :last_name "Last"
                   :dob "2nd Feb"}))
 
-  (jdbc/with-db-connection [db-conn ds-spec]
-    (jdbc/query db-conn "SELECT * FROM person"))
+  (jdbc/with-db-connection [db-conn pooled-ds-spec]
+    (jdbc/query db-conn ["SELECT * FROM person WHERE id = ?" 1]))
 
+  (jdbc/with-db-connection [db-conn pooled-ds-spec]
+    (jdbc/query db-conn ["SELECT * FROM person WHERE last_name like ?" "%Blo%"]))
 
+  (map (fn [[k v]] {(key->column k) v}) {:first-name "fred" :last-name "bloggs"})
+  (map->col-val-map {:first-name "fred" :last-name "bloggs"})
 
-
+  (repeat 3 (term->like-term "fred"))
   )
