@@ -71,3 +71,9 @@ set-d
 (def set-e (intersection set-a set-b))
 
 set-e
+
+(def brown [0 1 2 3 4 5 6 7 8])
+(def blue (assoc brown 5 "beef"))
+brown ;; => [0 1 2 3 4 5 6 7 8]
+
+blue ;; => [0 1 2 3 4 "beef" 6 7 8]

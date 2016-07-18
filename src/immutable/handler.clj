@@ -274,7 +274,7 @@
                   :dob "2nd Feb"}))
 
   (jdbc/with-db-connection [db-conn pooled-ds-spec]
-    (jdbc/query db-conn ["SELECT * FROM person WHERE id = ?" 1]))
+    (jdbc/query db-conn ["SELECT * FROM person"]))
 
   (jdbc/with-db-connection [db-conn pooled-ds-spec]
     (jdbc/query db-conn ["SELECT * FROM person WHERE last_name like ?" "%Blo%"]))
